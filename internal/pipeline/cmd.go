@@ -21,17 +21,16 @@ import (
 
 	"github.com/GoogleContainerTools/kpt/internal/util/cmdutil"
 	"github.com/spf13/cobra"
-	"k8s.io/klog"
 )
 
 // NewRunner returns a command runner
 func NewRunner(parent string) *Runner {
 	r := &Runner{}
 	c := &cobra.Command{
-		Use:     "run [DIR]",
-		Short:   "run",
-		Long:    "run",
-		Example: "run",
+		Use:     "render [DIR]",
+		Short:   "render",
+		Long:    "render",
+		Example: "render",
 		RunE:    r.runE,
 		PreRunE: r.preRunE,
 	}
@@ -71,7 +70,6 @@ func (r *Runner) runE(c *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	klog.Infof("running pipeline command")
 	executor := Executor{
 		PkgPath: r.pkgPath,
 	}

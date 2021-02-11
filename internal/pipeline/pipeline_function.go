@@ -24,6 +24,7 @@ import (
 
 	"github.com/GoogleContainerTools/kpt/internal/pipeline/runtime"
 	kptfilev1alpha2 "github.com/GoogleContainerTools/kpt/pkg/api/kptfile/v1alpha2"
+	"sigs.k8s.io/kustomize/kyaml/fn/runtime/runtimeutil"
 	"sigs.k8s.io/kustomize/kyaml/kio"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
@@ -35,11 +36,14 @@ func newFnRunner(f *kptfilev1alpha2.Function, pkgPath string) (kio.Filter, error
 	if err != nil {
 		return nil, err
 	}
-	return &fnRunner{
-		fn: &runtime.ContainerFn{
-			Image: f.Image,
-		},
-		fnConfig: config,
+
+	cfn := &runtime.ContainerFn{
+		Image: f.Image,
+	}
+
+	return &runtimeutil.FunctionFilter{
+		Run:            cfn.Run,
+		FunctionConfig: config,
 	}, nil
 }
 

@@ -21,18 +21,13 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/kio"
 )
 
-const (
-	sourceAllSubPkgs string = "./*"
-	sourceCurrentPkg string = "."
-)
-
 // fnChain returns a slice of function runners from the
 // functions and configs defined in pipeline.
-func fnChain(p *kptfilev1alpha2.Pipeline, pkgPath string) ([]kio.Filter, error) {
+func fnChain(pl *kptfilev1alpha2.Pipeline, pkgPath string) ([]kio.Filter, error) {
 	fns := []kptfilev1alpha2.Function{}
-	fns = append(fns, p.Mutators...)
+	fns = append(fns, pl.Mutators...)
 	// TODO: Validators cannot modify resources.
-	fns = append(fns, p.Validators...)
+	fns = append(fns, pl.Validators...)
 	var runners []kio.Filter
 	for i := range fns {
 		fn := fns[i]

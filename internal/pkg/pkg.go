@@ -16,14 +16,29 @@
 package pkg
 
 import (
+	"errors"
+	"fmt"
+	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	kptfilev1alpha2 "github.com/GoogleContainerTools/kpt/pkg/api/kptfile/v1alpha2"
+	"github.com/GoogleContainerTools/kpt/pkg/kptfile/kptfileutil"
+	"sigs.k8s.io/kustomize/kyaml/kio"
+	"sigs.k8s.io/kustomize/kyaml/kio/kioutil"
+	"sigs.k8s.io/kustomize/kyaml/sets"
+	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
 // Absolute unique OS-defined path to the package directory on the filesystem.
 type UniquePath string
+
+func (u UniquePath) String() string {
+	return string(u)
+}
 
 // Slash-separated path to the package directory on the filesytem relative to current working directory.
 // This is not guaranteed to be unique (e.g. in presence of symlinks) and should only
@@ -37,12 +52,7 @@ type Pkg struct {
 
 	// A package can contain zero or one Kptfile meta resource.
 	// A nil value represents an implicit package.
-	kptfile       *kptfilev1alpha2.KptFile
-	kptfileLoaded bool
-
-	// A package can contain zero or one Pipeline meta resource.
-	pipeline       *kptfilev1alpha2.Pipeline
-	pipelineLoaded bool
+	kptfile *kptfilev1alpha2.KptFile
 }
 
 // New returns a pkg given an absolute or relative OS-defined path.
@@ -50,12 +60,17 @@ type Pkg struct {
 func New(path string) (*Pkg, error) {
 	p := filepath.Clean(path)
 
-	u, err := filepath.EvalSymlinks(p)
+	// Note(droot): Calling EvalSymlinks before Abs causes a strange issue on OSX
+	// for directories under /tmp. If you have directory /tmp/a,
+	// evalSymlinks("a") !==> /private/tmp
+	// evalSymlinks("/tmp/a") ==> /private/tmp/a
+	// So this is resulting invalid paths if New() was invoked with relative path.
+	u, err := filepath.Abs(p)
 	if err != nil {
 		return nil, err
 	}
 
-	u, err = filepath.Abs(u)
+	u, err = filepath.EvalSymlinks(u)
 	if err != nil {
 		return nil, err
 	}
@@ -77,26 +92,177 @@ func New(path string) (*Pkg, error) {
 
 // Kptfile returns the Kptfile meta resource by lazy loading it from the filesytem.
 // A nil value represents an implicit package.
-func (p *Pkg) Kptfile() *kptfilev1alpha2.KptFile {
-	if !p.kptfileLoaded {
-		// TODO
-		// p.kptfile = ...
-		p.kptfileLoaded = true
+func (p *Pkg) Kptfile() (*kptfilev1alpha2.KptFile, error) {
+	if p.kptfile == nil {
+		kf, err := p.readKptfile()
+		if err != nil {
+			return nil, err
+		}
+		p.kptfile = kf
 	}
-	return p.kptfile
+	return p.kptfile, nil
 }
 
-// Pipeline returns the Pipeline meta resource by lazy loading it from the filesystem.
-func (p *Pkg) Pipeline() *kptfilev1alpha2.Pipeline {
-	if !p.pipelineLoaded {
-		// TODO
-		// p.pipeline = ...
-		p.pipelineLoaded = true
+// readKptfile reads the KptFile in the given pkg.
+// TODO(droot): This method exists for current version of Kptfile.
+// Need to reconcile with the team how we want to handle multiple versions
+// of Kptfile in code. One option is to follow Kubernetes approach to
+// have an internal version of Kptfile that all the code uses. In that case,
+// we will have to implement pieces for IO/Conversion with right interfaces.
+func (p *Pkg) readKptfile() (*kptfilev1alpha2.KptFile, error) {
+	kf := &kptfilev1alpha2.KptFile{}
+
+	f, err := os.Open(path.Join(p.UniquePath.String(), kptfilev1alpha2.KptFileName))
+
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			// assuming implicit kpt pkg
+			return kf, nil
+		}
+		return kf, fmt.Errorf("unable to read %s: %w", kptfilev1alpha2.KptFileName, err)
 	}
-	return p.pipeline
+	defer f.Close()
+
+	d := yaml.NewDecoder(f)
+	d.KnownFields(true)
+	if err = d.Decode(kf); err != nil {
+		return kf, fmt.Errorf("unable to parse %s: %w", kptfilev1alpha2.KptFileName, err)
+	}
+	return kf, nil
+}
+
+// Pipeline returns the Pipeline section of the pkg's Kptfile.
+// if pipeline is not specified in a Kptfile, it returns Zero value of the pipeline.
+func (p *Pkg) Pipeline() (*kptfilev1alpha2.Pipeline, error) {
+	kf, err := p.Kptfile()
+	if err != nil {
+		return nil, err
+	}
+	pl := kf.Pipeline
+	if pl == nil {
+		return &kptfilev1alpha2.Pipeline{}, nil
+	}
+	return pl, nil
 }
 
 // String returns the slash-separated relative path to the package.
 func (p *Pkg) String() string {
 	return string(p.DisplayPath)
+}
+
+// SubPackages returns sub packages of a pkg.
+// A sub directory that has a Kptfile is considered a sub package.
+func (p *Pkg) SubPackages() (subPkgs []*Pkg, err error) {
+	pkgPath := string(p.UniquePath)
+
+	files, err := ioutil.ReadDir(pkgPath)
+	if err != nil {
+		return subPkgs, fmt.Errorf("failed to read sub dirs for %s %w", p, err)
+	}
+	for _, f := range files {
+		if f.IsDir() {
+			dirPath := path.Join(pkgPath, f.Name())
+			isKptPkg, err := kptfileutil.HasKptfile(dirPath)
+			if err != nil {
+				return subPkgs, fmt.Errorf("failed to check kptfile in subpackage %w", err)
+			}
+			if isKptPkg {
+				subPkg, err := New(dirPath)
+				if err != nil {
+					return subPkgs, fmt.Errorf("failed to read subpkg at path %s %w", dirPath, err)
+				}
+				subPkgs = append(subPkgs, subPkg)
+			}
+		}
+	}
+	sort.Slice(subPkgs, func(i, j int) bool {
+		return subPkgs[i].DisplayPath < subPkgs[j].DisplayPath
+	})
+	return subPkgs, nil
+}
+
+// LocalResources returns resources that belong to this package excluding the subpackage resources.
+func (p *Pkg) LocalResources(includeMetaResources bool) (resources []*yaml.RNode, err error) {
+	hasKptfile, err := kptfileutil.HasKptfile(p.UniquePath.String())
+	if err != nil {
+		return resources, fmt.Errorf("failed to check kptfile %w", err)
+	}
+	if !hasKptfile {
+		return nil, nil
+	}
+	pl, err := p.Pipeline()
+	if err != nil {
+		return nil, err
+	}
+
+	pkgReader := &kio.LocalPackageReader{
+		PackagePath:        string(p.UniquePath),
+		PackageFileName:    kptfilev1alpha2.KptFileName,
+		IncludeSubpackages: false,
+		MatchFilesGlob:     kio.MatchAll,
+	}
+	resources, err = pkgReader.Read()
+	if err != nil {
+		err = fmt.Errorf("failed to read resources for pkg %s %w", p, err)
+		return resources, err
+	}
+	if !includeMetaResources {
+		resources = filterMetaResources(resources)
+		resources, err = filterFunctionConfigFiles(resources, functionConfigFilePaths(pl))
+		if err != nil {
+			return resources, fmt.Errorf("failed to filter function config files: %w", err)
+		}
+	}
+	return resources, err
+}
+
+// filterMetaResources filters kpt metadata files such as Kptfile, function configs.
+func filterMetaResources(resources []*yaml.RNode) []*yaml.RNode {
+	var filtered []*yaml.RNode
+	for _, r := range resources {
+		meta, _ := r.GetMeta()
+		if !strings.Contains(meta.APIVersion, "kpt.dev") {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
+
+// filterFunctionConfigFiles excludes the provided function config paths from
+// the given set of resources.
+func filterFunctionConfigFiles(resources []*yaml.RNode, pathsToExclude sets.String) (out []*yaml.RNode, err error) {
+	for _, r := range resources {
+		path, _, err := kioutil.GetFileAnnotations(r)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read path while filtering function config %w", err)
+		}
+		if pathsToExclude.Has(path) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+// functionConfigFilePaths returns paths to function config files referred in the
+// given pipeline.
+func functionConfigFilePaths(pl *kptfilev1alpha2.Pipeline) (fnConfigPaths sets.String) {
+	if pl == nil {
+		return nil
+	}
+	fnConfigPaths = sets.String{}
+
+	for _, fn := range pl.Mutators {
+		if fn.ConfigPath != "" {
+			// TODO(droot): check if cleaning this path has some unnecessary side effects
+			fnConfigPaths.Insert(path.Clean(fn.ConfigPath))
+		}
+	}
+	for _, fn := range pl.Validators {
+		if fn.ConfigPath != "" {
+			// TODO(droot): check if cleaning this path has some unnecessary side effects
+			fnConfigPaths.Insert(path.Clean(fn.ConfigPath))
+		}
+	}
+	return fnConfigPaths
 }

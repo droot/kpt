@@ -1,7 +1,7 @@
 apiVersion: kpt.dev/v1alpha2
 kind: Kptfile
 metadata:
-  name: app
+  name: app-with-generator
 pipeline:
   mutators:
   - image: gcr.io/kpt-fn/set-namespace:unstable
@@ -16,6 +16,4 @@ pipeline:
       data:
         labels:
         - label_name: tier
-          label_value: backend
-# Note: The following input UX is very poor, and we
-# are changing it to key-value pairs directly in configMap
+          label_value: db

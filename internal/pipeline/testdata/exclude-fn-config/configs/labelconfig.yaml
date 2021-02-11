@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: label-config
+data:
+  labels:
+    - label_name: tier
+      label_value: db
