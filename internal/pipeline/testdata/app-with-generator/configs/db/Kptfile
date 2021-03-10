@@ -9,12 +9,5 @@ pipeline:
     configMap:
       namespace: db
   - image: gcr.io/kpt-fn/set-label:unstable
-    config:
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: my-config
-      data:
-        labels:
-        - label_name: app
-          label_value: backend
+    configMap:
+      app: backend

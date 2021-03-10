@@ -17,7 +17,6 @@ package pipeline
 import (
 	"fmt"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/GoogleContainerTools/kpt/internal/pkg"
@@ -136,33 +135,33 @@ func (s hydrationState) String() string {
 }
 
 // hydrate hydrates given pkg and returns wet resources.
-func hydrate(pn *pkgNode, hctx *hydrationContext) (resources []*yaml.RNode, err error) {
-	currPkg, found := hctx.pkgs[pn.Path()]
+func hydrate(pn *pkgNode, hctx *hydrationContext) (output []*yaml.RNode, err error) {
+	curr, found := hctx.pkgs[pn.Path()]
 	if found {
-		switch currPkg.state {
+		switch curr.state {
 		case Hydrating:
 			// we detected a cycle
-			err = fmt.Errorf("found cycle in dependencies for package %s", currPkg.Path())
-			return resources, err
+			err = fmt.Errorf("found cycle in dependencies for package %s", curr.Path())
+			return output, err
 		case Wet:
-			resources = currPkg.resources
-			return resources, err
+			output = curr.resources
+			return output, err
 		default:
-			return resources, fmt.Errorf("package %s detected in invalid state", currPkg.pkg)
+			return output, fmt.Errorf("package %s detected in invalid state", curr.pkg)
 		}
-	} else {
-		// add it to the discovered package list
-		hctx.pkgs[pn.Path()] = pn
-		currPkg = pn
 	}
+	// add it to the discovered package list
+	hctx.pkgs[pn.Path()] = pn
+	curr = pn
+
 	// mark the pkg in hydrating
-	currPkg.state = Hydrating
+	curr.state = Hydrating
 	var input []*yaml.RNode
 
 	// determine sub packages to be hydrated
-	subpkgs, err := currPkg.pkg.SubPackages()
+	subpkgs, err := curr.pkg.SubPackages()
 	if err != nil {
-		return resources, err
+		return output, err
 	}
 	// hydrate recursively and gather hydated transitive resources.
 	for _, subpkg := range subpkgs {
@@ -170,51 +169,49 @@ func hydrate(pn *pkgNode, hctx *hydrationContext) (resources []*yaml.RNode, err 
 		var subPkgNode *pkgNode
 
 		if subPkgNode, err = newPkgNode("", subpkg); err != nil {
-			return resources, err
+			return output, err
 		}
 
 		transitiveResources, err = hydrate(subPkgNode, hctx)
 		if err != nil {
 			err = fmt.Errorf("failed to run pipeline on subpackage %s %w", subpkg, err)
-			return resources, err
+			return output, err
 		}
 
 		input = append(input, transitiveResources...)
 	}
 
-	// hydrate current package
-	currPkgResources, err := currPkg.pkg.LocalResources(false)
+	// gather resources present at the current package
+	currPkgResources, err := curr.pkg.LocalResources(false)
 	if err != nil {
-		return resources, err
+		return output, err
 	}
 	// include current package's resources in the input resource list
 	input = append(input, currPkgResources...)
 
-	resources, err = currPkg.runPipeline(input, hctx)
+	output, err = curr.runPipeline(input, hctx)
 	if err != nil {
-		return resources, err
+		return output, err
 	}
 
-	if hctx.root != currPkg {
-		// Resources are read from local filesystem or generated at a package level, so the
-		// path annotation in each resource points to path relative to that package.
-		// But the resources are written to the file system at the root package level, so
-		// the path annotation in each resources needs to be adjusted to be relative to the rootPkg.
-		relPath, err := filepath.Rel(hctx.root.Path(), currPkg.Path())
-		if err != nil {
-			return nil, err
-		}
-		resources, err = adjustRelPath(resources, relPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to adjust relative path %w", err)
-		}
+	// Resources are read from local filesystem or generated at a package level, so the
+	// path annotation in each resource points to path relative to that package.
+	// But the resources are written to the file system at the root package level, so
+	// the path annotation in each resources needs to be adjusted to be relative to the rootPkg.
+	relPath, err := curr.pkg.RelativePathTo(hctx.root.pkg)
+	if err != nil {
+		return nil, err
+	}
+	output, err = adjustRelPath(output, relPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to adjust relative path %w", err)
 	}
 
 	// pkg is hydrated, mark the pkg as wet and update the resources
-	currPkg.state = Wet
-	currPkg.resources = resources
+	curr.state = Wet
+	curr.resources = output
 
-	return resources, err
+	return output, err
 }
 
 // runPipeline runs the pipeline defined at current pkgNode on given input resources.
@@ -223,28 +220,27 @@ func (pn *pkgNode) runPipeline(input []*yaml.RNode, hctx *hydrationContext) ([]*
 		return nil, nil
 	}
 
-	output := &kio.PackageBuffer{}
-
 	pl, err := pn.pkg.Pipeline()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read pipeline for package %s %w", pn.pkg, err)
 	}
 
-	// empty pipeline
-	if len(pl.Mutators) == 0 && len(pl.Validators) == 0 {
+	if pl.IsEmpty() {
 		return input, nil
 	}
 
-	filters, err := fnFilters(pl, pn.Path())
+	fnChain, err := fnChain(pl, pn.Path())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get function filters: %w", err)
 	}
+
+	output := &kio.PackageBuffer{}
 	// create a kio pipeline from kyaml library to execute the function chains
 	kioPipeline := kio.Pipeline{
 		Inputs: []kio.Reader{
 			&kio.PackageBuffer{Nodes: input},
 		},
-		Filters: filters,
+		Filters: fnChain,
 		Outputs: []kio.Writer{output},
 	}
 	err = kioPipeline.Execute()
@@ -253,11 +249,17 @@ func (pn *pkgNode) runPipeline(input []*yaml.RNode, hctx *hydrationContext) ([]*
 		return nil, err
 	}
 	return output.Nodes, nil
-
 }
 
-// adjustRelPath updates the resources with given relative path.
+// path (location) of a KRM resources is tracked in a special key in
+// metadata.annotation field. adjustRelPath updates that path annotation by prepending
+// the given relPath to the current path annotation if it doesn't exist already.
+// During hydration, paths are adjusted with the relative path to the root
+// package before returning the resources to the parent in hydrate call.
 func adjustRelPath(resources []*yaml.RNode, relPath string) ([]*yaml.RNode, error) {
+	if relPath == "" {
+		return resources, nil
+	}
 	for _, r := range resources {
 		meta, err := r.GetMeta()
 		if err != nil {
@@ -265,7 +267,7 @@ func adjustRelPath(resources []*yaml.RNode, relPath string) ([]*yaml.RNode, erro
 		}
 		// TODO(droot): revisit this. There is an edge case where if relativePath(root, curr)
 		// is same as relativePath(curr, local-resource)
-		if relPath != "" && !strings.HasPrefix(meta.Annotations[kioutil.PathAnnotation], relPath) {
+		if !strings.HasPrefix(meta.Annotations[kioutil.PathAnnotation], relPath) {
 			newPath := path.Join(relPath, meta.Annotations[kioutil.PathAnnotation])
 			err = r.PipeE(yaml.SetAnnotation(kioutil.PathAnnotation, newPath))
 			if err != nil {
@@ -276,12 +278,21 @@ func adjustRelPath(resources []*yaml.RNode, relPath string) ([]*yaml.RNode, erro
 	return resources, nil
 }
 
-// fnFilters returns chain of functions that are applicable
-// to a given pipeline.
-func fnFilters(pl *kptfilev1alpha2.Pipeline, pkgPath string) ([]kio.Filter, error) {
-	filters, err := fnChain(pl, pkgPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get function chain: %w", err)
+// fnChain returns a slice of function runners from the
+// functions and configs defined in pipeline.
+func fnChain(pl *kptfilev1alpha2.Pipeline, pkgPath string) ([]kio.Filter, error) {
+	fns := []kptfilev1alpha2.Function{}
+	fns = append(fns, pl.Mutators...)
+	// TODO: Validators cannot modify resources.
+	fns = append(fns, pl.Validators...)
+	var runners []kio.Filter
+	for i := range fns {
+		fn := fns[i]
+		r, err := newFnRunner(&fn, pkgPath)
+		if err != nil {
+			return nil, err
+		}
+		runners = append(runners, r)
 	}
-	return filters, nil
+	return runners, nil
 }

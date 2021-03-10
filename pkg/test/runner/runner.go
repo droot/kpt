@@ -47,15 +47,15 @@ func NewRunner(testCase TestCase, c string) (*Runner, error) {
 func (r *Runner) Run() error {
 	switch r.cmd {
 	case CommandFnEval:
-		return r.runFn()
+		return r.runFnEval()
 	case CommandFnRender:
-		return r.runPipeline()
+		return r.runFnRender()
 	default:
 		return fmt.Errorf("invalid command %s", r.cmd)
 	}
 }
 
-func (r *Runner) runFn() error {
+func (r *Runner) runFnEval() error {
 	fmt.Printf("Running test against package %s\n", r.pkgName)
 	tmpDir, err := ioutil.TempDir("", "kpt-fn-e2e-*")
 	if err != nil {
@@ -112,11 +112,13 @@ func (r *Runner) runFn() error {
 	return nil
 }
 
-func (r *Runner) runPipeline() error {
-	fmt.Printf("Running test against package %s\n", r.pkgName)
+func (r *Runner) runFnRender() error {
 	tmpDir, err := ioutil.TempDir("", "kpt-pipeline-e2e-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary dir: %w", err)
+	}
+	if r.testCase.Config.Debug {
+		fmt.Printf("Running test against package %s in dir %s \n", r.pkgName, tmpDir)
 	}
 	if !r.testCase.Config.Debug {
 		// if debug is true, keep the test directory around for debugging

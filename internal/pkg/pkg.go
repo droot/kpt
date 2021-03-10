@@ -33,14 +33,16 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
 
-// Absolute unique OS-defined path to the package directory on the filesystem.
+// UniquePath represents absolute unique OS-defined path to the package directory on the filesystem.
 type UniquePath string
 
+// String returns the absolute path in string format.
 func (u UniquePath) String() string {
 	return string(u)
 }
 
-// Slash-separated path to the package directory on the filesytem relative to current working directory.
+// DisplayPath represents Slash-separated path to the package directory on the filesytem relative
+// to current working directory.
 // This is not guaranteed to be unique (e.g. in presence of symlinks) and should only
 // be used for display purposes and is subject to change.
 type DisplayPath string
@@ -112,7 +114,7 @@ func (p *Pkg) Kptfile() (*kptfilev1alpha2.KptFile, error) {
 func (p *Pkg) readKptfile() (*kptfilev1alpha2.KptFile, error) {
 	kf := &kptfilev1alpha2.KptFile{}
 
-	f, err := os.Open(path.Join(p.UniquePath.String(), kptfilev1alpha2.KptFileName))
+	f, err := os.Open(path.Join(string(p.UniquePath), kptfilev1alpha2.KptFileName))
 
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -148,6 +150,15 @@ func (p *Pkg) Pipeline() (*kptfilev1alpha2.Pipeline, error) {
 // String returns the slash-separated relative path to the package.
 func (p *Pkg) String() string {
 	return string(p.DisplayPath)
+}
+
+// RelativePathTo returns current package's path relative to a given package.
+// It returns an error if relative path doesn't exist.
+// In a nested package chain, one can use this method to get the relative
+// path of a subpackage relative to an ancestor package up the chain.
+// Example: rel, _ := subpkg.RelativePathTo(rootPkg)
+func (p *Pkg) RelativePathTo(ancestorPkg *Pkg) (string, error) {
+	return filepath.Rel(string(ancestorPkg.UniquePath), string(p.UniquePath))
 }
 
 // SubPackages returns sub packages of a pkg.
@@ -207,8 +218,7 @@ func (p *Pkg) LocalResources(includeMetaResources bool) (resources []*yaml.RNode
 		return resources, err
 	}
 	if !includeMetaResources {
-		resources = filterMetaResources(resources)
-		resources, err = filterFunctionConfigFiles(resources, functionConfigFilePaths(pl))
+		resources, err = filterMetaResources(resources, pl)
 		if err != nil {
 			return resources, fmt.Errorf("failed to filter function config files: %w", err)
 		}
@@ -217,31 +227,28 @@ func (p *Pkg) LocalResources(includeMetaResources bool) (resources []*yaml.RNode
 }
 
 // filterMetaResources filters kpt metadata files such as Kptfile, function configs.
-func filterMetaResources(resources []*yaml.RNode) []*yaml.RNode {
-	var filtered []*yaml.RNode
-	for _, r := range resources {
-		meta, _ := r.GetMeta()
-		if !strings.Contains(meta.APIVersion, "kpt.dev") {
-			filtered = append(filtered, r)
+func filterMetaResources(input []*yaml.RNode, pl *kptfilev1alpha2.Pipeline) (output []*yaml.RNode, err error) {
+	pathsToExclude := functionConfigFilePaths(pl)
+	for _, r := range input {
+		meta, err := r.GetMeta()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read metadata for resource %w", err)
 		}
-	}
-	return filtered
-}
-
-// filterFunctionConfigFiles excludes the provided function config paths from
-// the given set of resources.
-func filterFunctionConfigFiles(resources []*yaml.RNode, pathsToExclude sets.String) (out []*yaml.RNode, err error) {
-	for _, r := range resources {
 		path, _, err := kioutil.GetFileAnnotations(r)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read path while filtering function config %w", err)
+			return nil, fmt.Errorf("failed to read path while filtering meta resources %w", err)
 		}
+		// filter out pkg metadata such as Kptfile
+		if strings.Contains(meta.APIVersion, "kpt.dev") {
+			continue
+		}
+		// filter out function config files
 		if pathsToExclude.Has(path) {
 			continue
 		}
-		out = append(out, r)
+		output = append(output, r)
 	}
-	return out, nil
+	return output, nil
 }
 
 // functionConfigFilePaths returns paths to function config files referred in the

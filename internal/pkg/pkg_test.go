@@ -134,7 +134,10 @@ spec:
 				nodes = append(nodes, res)
 			}
 
-			filteredRes := filterMetaResources(nodes)
+			filteredRes, err := filterMetaResources(nodes, nil)
+			if err != nil {
+				t.Errorf("unexpected error in filtering meta resources: %v", err)
+			}
 			if len(filteredRes) != len(test.expected) {
 				t.Fatal("length of filtered resources not equal to expected")
 			}

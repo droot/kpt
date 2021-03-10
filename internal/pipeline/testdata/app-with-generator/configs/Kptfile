@@ -8,12 +8,5 @@ pipeline:
     configMap:
       namespace: staging
   - image: gcr.io/kpt-fn/set-label:unstable
-    config:
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: my-config
-      data:
-        labels:
-        - label_name: tier
-          label_value: db
+    configMap:
+      tier: db
