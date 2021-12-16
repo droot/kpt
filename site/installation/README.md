@@ -124,8 +124,14 @@ $ kpt version
   https://console.cloud.google.com/gcr/images/kpt-dev/GLOBAL/kpt-gcloud?gcrImageListsize=30
 [cloud-sdk]: https://github.com/GoogleCloudPlatform/cloud-sdk-docker
 [linux]:
+<<<<<<< HEAD
   https://github.com/GoogleContainerTools/kpt/releases/download/v1.0.0-beta.12/kpt_linux_amd64
 [darwin]:
   https://github.com/GoogleContainerTools/kpt/releases/download/v1.0.0-beta.12/kpt_darwin_amd64
+=======
+  https://github.com/GoogleContainerTools/kpt/releases/download/v1.0.0-beta.9/kpt_linux_amd64
+[darwin]:
+  https://github.com/GoogleContainerTools/kpt/releases/download/v1.0.0-beta.9/kpt_darwin_amd64
+>>>>>>> 45fb5ee9 (Oci support rebased (#2621))
 [migration guide]: /installation/migration
 [bash-completion]: https://github.com/scop/bash-completion#installation

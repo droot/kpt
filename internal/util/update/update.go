@@ -18,20 +18,16 @@ package update
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/GoogleContainerTools/kpt/internal/errors"
 	"github.com/GoogleContainerTools/kpt/internal/pkg"
 	"github.com/GoogleContainerTools/kpt/internal/printer"
 	"github.com/GoogleContainerTools/kpt/internal/types"
 	"github.com/GoogleContainerTools/kpt/internal/util/addmergecomment"
-	"github.com/GoogleContainerTools/kpt/internal/util/fetch"
-	"github.com/GoogleContainerTools/kpt/internal/util/git"
 	"github.com/GoogleContainerTools/kpt/internal/util/pkgutil"
+	"github.com/GoogleContainerTools/kpt/internal/util/remote"
 	"github.com/GoogleContainerTools/kpt/internal/util/stack"
 	kptfilev1 "github.com/GoogleContainerTools/kpt/pkg/api/kptfile/v1"
 	"github.com/GoogleContainerTools/kpt/pkg/kptfile/kptfileutil"
@@ -117,13 +113,19 @@ func (u Command) Run(ctx context.Context) error {
 		return errors.E(op, u.Pkg.UniquePath, err)
 	}
 
-	if rootKf.Upstream == nil || rootKf.Upstream.Git == nil {
-		return errors.E(op, u.Pkg.UniquePath,
-			fmt.Errorf("package must have an upstream reference"))
+	rootUps, err := remote.NewUpstream(rootKf)
+	if err != nil {
+		return errors.E(op, u.Pkg.UniquePath, fmt.Errorf("package must have an upstream reference: %v", err))
 	}
-	originalRootKfRef := rootKf.Upstream.Git.Ref
+
+	originalRootKfRef, err := rootUps.Ref()
+	if err != nil {
+		return errors.E(op, u.Pkg.UniquePath, err)
+	}
 	if u.Ref != "" {
-		rootKf.Upstream.Git.Ref = u.Ref
+		if err := rootUps.SetRef(u.Ref); err != nil {
+			return errors.E(op, u.Pkg.UniquePath, err)
+		}
 	}
 	if u.Strategy != "" {
 		rootKf.Upstream.UpdateStrategy = u.Strategy
@@ -158,13 +160,14 @@ func (u Command) Run(ctx context.Context) error {
 				return errors.E(op, p.UniquePath, err)
 			}
 
-			if subKf.Upstream != nil && subKf.Upstream.Git != nil {
+			if subUps, err := remote.NewUpstream(subKf); err == nil {
 				// update subpackage kf ref/strategy if current pkg is a subpkg of root pkg or is root pkg
 				// and if original root pkg ref matches the subpkg ref
-				if shouldUpdateSubPkgRef(subKf, rootKf, originalRootKfRef) {
-					updateSubKf(subKf, u.Ref, u.Strategy)
-					err = kptfileutil.WriteFile(subPkg.UniquePath.String(), subKf)
-					if err != nil {
+				if remote.ShouldUpdateSubPkgRef(subUps, rootUps, originalRootKfRef) {
+					if err := updateSubKf(subKf, subUps, u.Ref, u.Strategy); err != nil {
+						return errors.E(op, subPkg.UniquePath, err)
+					}
+					if err = kptfileutil.WriteFile(subPkg.UniquePath.String(), subKf); err != nil {
 						return errors.E(op, subPkg.UniquePath, err)
 					}
 				}
@@ -182,14 +185,17 @@ func (u Command) Run(ctx context.Context) error {
 }
 
 // updateSubKf updates subpackage with given ref and update strategy
-func updateSubKf(subKf *kptfilev1.KptFile, ref string, strategy kptfilev1.UpdateStrategyType) {
+func updateSubKf(subKf *kptfilev1.KptFile, subUps remote.Upstream, ref string, strategy kptfilev1.UpdateStrategyType) error {
 	// check if explicit ref provided
 	if ref != "" {
-		subKf.Upstream.Git.Ref = ref
+		if err := subUps.SetRef(ref); err != nil {
+			return err
+		}
 	}
 	if strategy != "" {
 		subKf.Upstream.UpdateStrategy = strategy
 	}
+<<<<<<< HEAD
 }
 
 // shouldUpdateSubPkgRef checks if subpkg ref should be updated.
@@ -231,6 +237,9 @@ type nilRepoClone struct {
 // the nilRepoClone, this will always be an empty directory.
 func (nrc *nilRepoClone) AbsPath() string {
 	return nrc.dir
+=======
+	return nil
+>>>>>>> 45fb5ee9 (Oci support rebased (#2621))
 }
 
 // updateRootPackage updates a local package. It will use the information
@@ -246,30 +255,36 @@ func (u Command) updateRootPackage(ctx context.Context, p *pkg.Pkg) error {
 	pr := printer.FromContextOrDie(ctx)
 	pr.PrintPackage(p, !(p == u.Pkg))
 
-	g := kf.Upstream.Git
-	updated := &git.RepoSpec{OrgRepo: g.Repo, Path: g.Directory, Ref: g.Ref}
-	pr.Printf("Fetching upstream from %s@%s\n", kf.Upstream.Git.Repo, kf.Upstream.Git.Ref)
-	if err := fetch.ClonerUsingGitExec(ctx, updated); err != nil {
+	upstream, err := remote.NewUpstream(kf)
+	if err != nil {
 		return errors.E(op, p.UniquePath, err)
 	}
-	defer os.RemoveAll(updated.AbsPath())
 
-	var origin repoClone
+	updatedTmpPath, err := os.MkdirTemp("", "kpt-updated-")
+	if err != nil {
+		return errors.E(op, p.UniquePath, err)
+	}
+	defer os.RemoveAll(updatedTmpPath)
+
+	pr.Printf("Fetching upstream from %s\n", upstream.String())
+	updatedAbsPath, commit, err := upstream.FetchUpstream(ctx, updatedTmpPath)
+	if err != nil {
+		return errors.E(op, p.UniquePath, err)
+	}
+
+	originTmpPath, err := os.MkdirTemp("", "kpt-origin-")
+	if err != nil {
+		return errors.E(op, p.UniquePath, err)
+	}
+	defer os.RemoveAll(originTmpPath)
+	originAbsPath := originTmpPath
+
 	if kf.UpstreamLock != nil {
-		gLock := kf.UpstreamLock.Git
-		originRepoSpec := &git.RepoSpec{OrgRepo: gLock.Repo, Path: gLock.Directory, Ref: gLock.Commit}
-		pr.Printf("Fetching origin from %s@%s\n", kf.Upstream.Git.Repo, kf.Upstream.Git.Ref)
-		if err := fetch.ClonerUsingGitExec(ctx, originRepoSpec); err != nil {
-			return errors.E(op, p.UniquePath, err)
-		}
-		origin = originRepoSpec
-	} else {
-		origin, err = newNilRepoClone()
-		if err != nil {
+		pr.Printf("Fetching origin from %s\n", upstream.LockedString())
+		if originAbsPath, err = upstream.FetchUpstreamLock(ctx, originTmpPath); err != nil {
 			return errors.E(op, p.UniquePath, err)
 		}
 	}
-	defer os.RemoveAll(origin.AbsPath())
 
 	s := stack.New()
 	s.Push(".")
@@ -277,8 +292,8 @@ func (u Command) updateRootPackage(ctx context.Context, p *pkg.Pkg) error {
 	for s.Len() > 0 {
 		relPath := s.Pop()
 		localPath := filepath.Join(p.UniquePath.String(), relPath)
-		updatedPath := filepath.Join(updated.AbsPath(), relPath)
-		originPath := filepath.Join(origin.AbsPath(), relPath)
+		updatedPath := filepath.Join(updatedAbsPath, relPath)
+		originPath := filepath.Join(originAbsPath, relPath)
 
 		isRoot := false
 		if relPath == "." {
@@ -299,7 +314,7 @@ func (u Command) updateRootPackage(ctx context.Context, p *pkg.Pkg) error {
 		}
 	}
 
-	if err := kptfileutil.UpdateUpstreamLockFromGit(p.UniquePath.String(), updated); err != nil {
+	if err := kptfileutil.UpdateUpstreamLock(p.UniquePath.String(), upstream.BuildUpstreamLock(commit)); err != nil {
 		return errors.E(op, p.UniquePath, err)
 	}
 	return nil

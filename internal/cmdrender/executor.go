@@ -28,7 +28,10 @@ import (
 	"github.com/GoogleContainerTools/kpt/internal/printer"
 	"github.com/GoogleContainerTools/kpt/internal/types"
 	"github.com/GoogleContainerTools/kpt/internal/util/attribution"
+<<<<<<< HEAD
 	"github.com/GoogleContainerTools/kpt/internal/util/cmdutil"
+=======
+>>>>>>> 45fb5ee9 (Oci support rebased (#2621))
 	"github.com/GoogleContainerTools/kpt/internal/util/printerutil"
 	fnresult "github.com/GoogleContainerTools/kpt/pkg/api/fnresult/v1"
 	kptfilev1 "github.com/GoogleContainerTools/kpt/pkg/api/kptfile/v1"

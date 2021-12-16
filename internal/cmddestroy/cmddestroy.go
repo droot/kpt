@@ -166,6 +166,14 @@ func runDestroy(r *Runner, inv inventory.InventoryInfo, dryRunStrategy common.Dr
 	if err != nil {
 		return err
 	}
+<<<<<<< HEAD
+=======
+	options := apply.DestroyerOptions{
+		InventoryPolicy: r.inventoryPolicy,
+		DryRunStrategy:  dryRunStrategy,
+	}
+	ch := destroyer.Run(context.Background(), inv, options)
+>>>>>>> 45fb5ee9 (Oci support rebased (#2621))
 
 	destroyer, err := apply.NewDestroyer(r.factory, invClient)
 	if err != nil {

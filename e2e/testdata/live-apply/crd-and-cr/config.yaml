@@ -26,6 +26,7 @@ stdOut: |
   custom.kpt.dev/cr reconcile pending
   custom.kpt.dev/cr reconciled
   2 resource(s) reconciled, 0 skipped, 0 failed to reconcile, 0 timed out
+
 inventory:
   - group: apiextensions.k8s.io
     kind: CustomResourceDefinition
