@@ -32,6 +32,7 @@ $ kpt version
 kpt provides auto-completion support for several of the common shells.
 To see the options for enabling shell auto-completion:
 ```shell
+<<<<<<< HEAD
 $ kpt completion -h
 ```
 
@@ -49,6 +50,43 @@ The kpt completion script for a shell can be generated with the commands
 `kpt completion bash`, `kpt completion zsh`, etc.
 For instructions on how to enable the script for the given shell, see the help
 page with the commands `kpt completion bash -h`, `kpt completion zsh -h`, etc.
+=======
+kpt completion -h
+```
+
+### Prerequisites
+`kpt` depends on `bash-completion` in order to support auto-completion for the
+bash shell. If you are using bash as your shell, you will need to install
+`bash-completion` in order to use kpt's auto-completion feature.
+`bash-completion` is provided by many package managers
+(see [here][bash-completion]).
+
+### Enable kpt auto-completion
+The kpt completion script for a shell can be generated with the commands
+`kpt completion bash`, `kpt completion zsh`, etc. Sourcing the completion script
+in your shell enables auto-completion.
+
+#### Enable auto-completion for your current shell
+bash:
+```shell
+source <(kpt completion bash)
+```
+zsh:
+```shell
+source <(kpt completion zsh)
+```
+etc.
+#### Enable kpt completion for all your shell sessions
+bash:
+```shell
+echo 'source <(kpt completion bash)' >> ~/.bashrc
+```
+zsh:
+```shell
+echo 'source <(kpt completion zsh)' >> ~/.zshrc
+```
+etc.
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 
 <!-- gcloud and homebrew are not yet available for builds from the main branch.
 ## gcloud
@@ -93,7 +131,11 @@ Use one of the kpt docker images.
 ### `kpt`
 
 ```shell
+<<<<<<< HEAD
 $ docker run gcr.io/kpt-dev/kpt:v1.0.0-beta.12 version
+=======
+$ docker run gcr.io/kpt-dev/kpt:v1.0.0-beta.10 version
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 ```
 
 ### `kpt-gcloud`
@@ -101,7 +143,11 @@ $ docker run gcr.io/kpt-dev/kpt:v1.0.0-beta.12 version
 An image which includes kpt based upon the Google [cloud-sdk] alpine image.
 
 ```shell
+<<<<<<< HEAD
 $ docker run gcr.io/kpt-dev/kpt-gcloud:v1.0.0-beta.12 version
+=======
+$ docker run gcr.io/kpt-dev/kpt-gcloud:v1.0.0-beta.10 version
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 ```
 
 ## Source
@@ -125,6 +171,7 @@ $ kpt version
 [cloud-sdk]: https://github.com/GoogleCloudPlatform/cloud-sdk-docker
 [linux]:
 <<<<<<< HEAD
+<<<<<<< HEAD
   https://github.com/GoogleContainerTools/kpt/releases/download/v1.0.0-beta.12/kpt_linux_amd64
 [darwin]:
   https://github.com/GoogleContainerTools/kpt/releases/download/v1.0.0-beta.12/kpt_darwin_amd64
@@ -133,5 +180,10 @@ $ kpt version
 [darwin]:
   https://github.com/GoogleContainerTools/kpt/releases/download/v1.0.0-beta.9/kpt_darwin_amd64
 >>>>>>> 45fb5ee9 (Oci support rebased (#2621))
+=======
+  https://github.com/GoogleContainerTools/kpt/releases/download/v1.0.0-beta.10/kpt_linux_amd64
+[darwin]:
+  https://github.com/GoogleContainerTools/kpt/releases/download/v1.0.0-beta.10/kpt_darwin_amd64
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 [migration guide]: /installation/migration
 [bash-completion]: https://github.com/scop/bash-completion#installation

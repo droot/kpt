@@ -352,6 +352,7 @@ func TestListImages(t *testing.T) {
 }`)
 	sort.Strings(result)
 	assert.Equal(t, []string{"apply-setters:v0.1.1", "gatekeeper:v0.2.1"}, result)
+<<<<<<< HEAD
 }
 
 func TestIsSupportedDockerVersion(t *testing.T) {
@@ -392,4 +393,6 @@ func TestIsSupportedDockerVersion(t *testing.T) {
 			}
 		})
 	}
+=======
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 }

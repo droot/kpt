@@ -23,7 +23,10 @@ import (
 	"github.com/GoogleContainerTools/kpt/internal/util/argutil"
 	"github.com/GoogleContainerTools/kpt/internal/util/strings"
 	"github.com/GoogleContainerTools/kpt/pkg/live"
+<<<<<<< HEAD
 	"github.com/GoogleContainerTools/kpt/pkg/status"
+=======
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/kubectl/pkg/cmd/util"
@@ -60,7 +63,11 @@ func NewRunner(ctx context.Context, factory util.Factory,
 			fmt.Sprintf("%q and %q.", flagutils.InventoryPolicyStrict, flagutils.InventoryPolicyAdopt))
 	c.Flags().BoolVar(&r.dryRun, "dry-run", false,
 		"dry-run apply for the resources in the package.")
+<<<<<<< HEAD
 	c.Flags().BoolVar(&r.printStatusEvents, "show-status-events", false,
+=======
+	c.Flags().BoolVar(&r.printStatusEvents, "status-events", false,
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 		"Print status events (always enabled for table output)")
 	return r
 }
@@ -161,20 +168,26 @@ func runDestroy(r *Runner, inv inventory.InventoryInfo, dryRunStrategy common.Dr
 	if err != nil {
 		return err
 	}
+<<<<<<< HEAD
 
 	statusPoller, err := status.NewStatusPoller(r.factory)
+=======
+	destroyer, err := apply.NewDestroyer(r.factory, invClient)
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 	if err != nil {
 		return err
 	}
 <<<<<<< HEAD
 =======
 	options := apply.DestroyerOptions{
-		InventoryPolicy: r.inventoryPolicy,
-		DryRunStrategy:  dryRunStrategy,
+		InventoryPolicy:  r.inventoryPolicy,
+		DryRunStrategy:   dryRunStrategy,
+		EmitStatusEvents: true,
 	}
 	ch := destroyer.Run(context.Background(), inv, options)
 >>>>>>> 45fb5ee9 (Oci support rebased (#2621))
 
+<<<<<<< HEAD
 	destroyer, err := apply.NewDestroyer(r.factory, invClient)
 	if err != nil {
 		return err
@@ -188,6 +201,8 @@ func runDestroy(r *Runner, inv inventory.InventoryInfo, dryRunStrategy common.Dr
 	}
 	ch := destroyer.Run(context.Background(), inv, options)
 
+=======
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 	// Print the preview strategy unless the output format is json.
 	if dryRunStrategy.ClientOrServerDryRun() && r.output != printers.JSONPrinter {
 		if dryRunStrategy.ServerDryRun() {

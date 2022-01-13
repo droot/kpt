@@ -15,6 +15,7 @@
 package live
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"os"
@@ -98,6 +99,7 @@ func (r *Runner) VerifyExitCode(t *testing.T, err error) {
 
 func (r *Runner) VerifyStdout(t *testing.T, stdout string) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	assert.Equal(t, strings.TrimSpace(r.Config.StdOut), prepOutput(t, stdout))
 }
 
@@ -114,6 +116,17 @@ func prepOutput(t *testing.T, s string) string {
 func (r *Runner) VerifyStderr(t *testing.T, stderr string) {
 	assert.Equal(t, strings.TrimSpace(r.Config.StdErr), strings.TrimSpace(substituteTimestamps(stderr)))
 >>>>>>> 45fb5ee9 (Oci support rebased (#2621))
+=======
+	assert.Equal(t, strings.TrimSpace(r.Config.StdOut), prepOutput(t, stdout))
+}
+
+func (r *Runner) VerifyStderr(t *testing.T, stderr string) {
+	assert.Equal(t, strings.TrimSpace(r.Config.StdErr), prepOutput(t, stderr))
+}
+
+func prepOutput(t *testing.T, s string) string {
+	return strings.TrimSpace(substituteTimestamps(removeStatusEvents(t, s)))
+>>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 }
 
 func (r *Runner) VerifyInventory(t *testing.T, name, namespace string) {
