@@ -35,7 +35,6 @@ import (
 )
 
 const (
-<<<<<<< HEAD
 	StackTraceOnErrors                      = "COBRA_STACK_TRACE_ON_ERRORS"
 	trueString                              = "true"
 	Stdout                                  = "stdout"
@@ -43,14 +42,6 @@ const (
 	dockerVersionTimeout      time.Duration = 5 * time.Second
 	FunctionsCatalogURL                     = "https://catalog.kpt.dev/catalog-v2.json"
 	minSupportedDockerVersion string        = "v20.10.0"
-=======
-	StackTraceOnErrors                 = "COBRA_STACK_TRACE_ON_ERRORS"
-	trueString                         = "true"
-	Stdout                             = "stdout"
-	Unwrap                             = "unwrap"
-	dockerVersionTimeout time.Duration = 5 * time.Second
-	FunctionsCatalogURL                = "https://catalog.kpt.dev/catalog-v2.json"
->>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 )
 
 // FixDocs replaces instances of old with new in the docs for c

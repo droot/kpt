@@ -32,8 +32,6 @@ import (
 	"sigs.k8s.io/cli-utils/pkg/apply/taskrunner"
 	"sigs.k8s.io/cli-utils/pkg/common"
 	"sigs.k8s.io/cli-utils/pkg/inventory"
-	"sigs.k8s.io/cli-utils/pkg/kstatus/polling"
-	"sigs.k8s.io/cli-utils/pkg/kstatus/polling/engine"
 	"sigs.k8s.io/cli-utils/pkg/object"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
 )
@@ -281,11 +279,7 @@ func InstallResourceGroupCRD(factory cmdutil.Factory) error {
 		for _, t := range tasks {
 			taskQueue <- t
 		}
-<<<<<<< HEAD
 		statusPoller, err := status.NewStatusPoller(factory)
-=======
-		statusPoller, err := polling.NewStatusPollerFromFactory(factory, []engine.StatusReader{})
->>>>>>> aa29f771 (Pull from main into oci-branch (#2643))
 		if err != nil {
 			handleError(eventChannel, err)
 			return
